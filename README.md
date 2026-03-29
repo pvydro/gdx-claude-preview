@@ -20,8 +20,8 @@ Claude preview tools --> see the browser page --> interact with the game
 |----------|--------|-------------|
 | `/` | GET | HTML preview page with auto-refreshing game view |
 | `/screenshot` | GET | Latest game frame as JPEG |
-| `/input` | POST | Mouse click events (`{x, y, button}`) |
-| `/key` | POST | Keyboard events (`{type, code}`) |
+| `/input` | POST | Mouse events (`{type, x, y, button}`) -- supports `mousedown`, `mouseup`, `mousemove` |
+| `/key` | POST | Keyboard events (`{type, code}`) -- supports `keydown`, `keyup` |
 | `/info` | GET | Game dimensions, FPS, ready state |
 
 ## Setup
@@ -67,6 +67,18 @@ The capture pipeline is designed to have near-zero impact on game performance:
 
 **Zero overhead when idle** -- When no preview server is running or no browser is connected, the only cost is the frame counter increment.
 
+## Input
+
+The library supports both **event-based** and **polling-based** input, covering the two ways LibGDX games read input:
+
+**Event-based** (Scene2D UI, `InputProcessor` callbacks): Mouse clicks and key presses are dispatched through `Gdx.input.getInputProcessor()` as `touchDown`/`touchUp`/`keyDown`/`keyUp`/`mouseMoved` events. This is how `Stage` buttons and `InputMultiplexer` listeners receive input.
+
+**Polling-based** (`Gdx.input.getX()`, `isKeyPressed()`, `isButtonPressed()`): A `LivePreviewInput` wrapper replaces `Gdx.input` to intercept polling calls. When the preview is actively sending input, `getX()`/`getY()` return the preview mouse position. Pressed-state queries use OR logic -- returning true if either the real input or the preview says pressed, so the developer can use real keyboard/mouse alongside the preview.
+
+The wrapper is re-installed at the top of every `render()` call because the LWJGL3 backend's `makeCurrent()` overwrites `Gdx.input` each frame. This re-install is a single `instanceof` check + field assignment -- negligible cost.
+
+The browser page sends `mousemove` events (throttled to ~60/sec) for aim tracking, and separate `mousedown`/`mouseup` events for click/hold actions.
+
 ## Architecture
 
 ```
@@ -75,7 +87,8 @@ src/main/java/com/pvydro/gdxclaudepreview/
   LivePreviewWrapper.java       -- ApplicationListener decorator
   LivePreviewHttpServer.java    -- HTTP endpoints + embedded HTML page
   FramebufferCapture.java       -- GL capture + background JPEG encoding
-  InputBridge.java              -- Thread-safe input event queue
+  LivePreviewInput.java         -- Gdx.input wrapper for polling-based input
+  InputBridge.java              -- Thread-safe input event queue + polling state
   KeyMapping.java               -- JS KeyboardEvent.code --> LibGDX Input.Keys
   internal/
     NanoHTTPD.java              -- Vendored HTTP server (BSD license)

@@ -83,14 +83,23 @@ public class LivePreviewHttpServer extends NanoHTTPD {
                 return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "No body");
             }
 
+            String type = extractString(json, "type");
             int x = extractInt(json, "x");
             int y = extractInt(json, "y");
             int button = extractInt(json, "button");
-
             int gdxButton = button == 2 ? Input.Buttons.RIGHT : Input.Buttons.LEFT;
 
-            inputBridge.enqueue(InputBridge.InputEvent.click(x, y, gdxButton));
-            inputBridge.enqueue(InputBridge.InputEvent.clickUp(x, y, gdxButton));
+            if ("mousemove".equals(type)) {
+                inputBridge.enqueue(InputBridge.InputEvent.mouseMove(x, y));
+            } else if ("mousedown".equals(type)) {
+                inputBridge.enqueue(InputBridge.InputEvent.click(x, y, gdxButton));
+            } else if ("mouseup".equals(type)) {
+                inputBridge.enqueue(InputBridge.InputEvent.clickUp(x, y, gdxButton));
+            } else {
+                // Legacy click: send touchDown + touchUp pair
+                inputBridge.enqueue(InputBridge.InputEvent.click(x, y, gdxButton));
+                inputBridge.enqueue(InputBridge.InputEvent.clickUp(x, y, gdxButton));
+            }
 
             return newFixedLengthResponse(Response.Status.OK, "application/json", "{\"ok\":true}");
         } catch (Exception e) {
@@ -219,17 +228,46 @@ public class LivePreviewHttpServer extends NanoHTTPD {
             + "    img.src = '/screenshot?t=' + t;\n"
             + "  }\n"
             + "\n"
-            + "  img.addEventListener('click', function(e) {\n"
-            + "    if (!gameW || !gameH) return;\n"
+            + "  function gameCoords(e) {\n"
             + "    var rect = img.getBoundingClientRect();\n"
-            + "    var scaleX = gameW / rect.width;\n"
-            + "    var scaleY = gameH / rect.height;\n"
-            + "    var x = Math.round((e.clientX - rect.left) * scaleX);\n"
-            + "    var y = Math.round((e.clientY - rect.top) * scaleY);\n"
+            + "    return {\n"
+            + "      x: Math.round((e.clientX - rect.left) * (gameW / rect.width)),\n"
+            + "      y: Math.round((e.clientY - rect.top) * (gameH / rect.height))\n"
+            + "    };\n"
+            + "  }\n"
+            + "\n"
+            + "  img.addEventListener('mousedown', function(e) {\n"
+            + "    e.preventDefault();\n"
+            + "    if (!gameW || !gameH) return;\n"
+            + "    var c = gameCoords(e);\n"
             + "    fetch('/input', {\n"
             + "      method: 'POST',\n"
             + "      headers: {'Content-Type': 'application/json'},\n"
-            + "      body: JSON.stringify({type:'click', x:x, y:y, button:e.button})\n"
+            + "      body: JSON.stringify({type:'mousedown', x:c.x, y:c.y, button:e.button})\n"
+            + "    });\n"
+            + "  });\n"
+            + "\n"
+            + "  document.addEventListener('mouseup', function(e) {\n"
+            + "    if (!gameW || !gameH) return;\n"
+            + "    var c = gameCoords(e);\n"
+            + "    fetch('/input', {\n"
+            + "      method: 'POST',\n"
+            + "      headers: {'Content-Type': 'application/json'},\n"
+            + "      body: JSON.stringify({type:'mouseup', x:c.x, y:c.y, button:e.button})\n"
+            + "    });\n"
+            + "  });\n"
+            + "\n"
+            + "  var lastMoveTime = 0;\n"
+            + "  img.addEventListener('mousemove', function(e) {\n"
+            + "    var now = Date.now();\n"
+            + "    if (now - lastMoveTime < 16) return;\n"
+            + "    lastMoveTime = now;\n"
+            + "    if (!gameW || !gameH) return;\n"
+            + "    var c = gameCoords(e);\n"
+            + "    fetch('/input', {\n"
+            + "      method: 'POST',\n"
+            + "      headers: {'Content-Type': 'application/json'},\n"
+            + "      body: JSON.stringify({type:'mousemove', x:c.x, y:c.y})\n"
             + "    });\n"
             + "  });\n"
             + "\n"

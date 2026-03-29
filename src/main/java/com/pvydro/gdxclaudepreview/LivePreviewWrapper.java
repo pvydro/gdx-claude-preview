@@ -1,6 +1,8 @@
 package com.pvydro.gdxclaudepreview;
 
 import com.badlogic.gdx.ApplicationListener;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Input;
 
 import java.io.IOException;
 
@@ -11,6 +13,7 @@ public class LivePreviewWrapper implements ApplicationListener {
     private final FramebufferCapture capture;
     private final InputBridge inputBridge;
     private LivePreviewHttpServer server;
+    private LivePreviewInput previewInput;
 
     public LivePreviewWrapper(ApplicationListener delegate, int port) {
         this.delegate = delegate;
@@ -22,6 +25,9 @@ public class LivePreviewWrapper implements ApplicationListener {
     @Override
     public void create() {
         delegate.create();
+
+        // Create input wrapper so polling-based game code sees preview input
+        previewInput = new LivePreviewInput(Gdx.input, inputBridge);
 
         server = new LivePreviewHttpServer(port, capture, inputBridge);
         try {
@@ -42,6 +48,15 @@ public class LivePreviewWrapper implements ApplicationListener {
 
     @Override
     public void render() {
+        // Re-install input wrapper every frame because LWJGL3's makeCurrent()
+        // overwrites Gdx.input with the real Lwjgl3Input before each render call
+        if (previewInput != null) {
+            if (!(Gdx.input instanceof LivePreviewInput)) {
+                previewInput.setDelegate(Gdx.input);
+            }
+            Gdx.input = previewInput;
+        }
+
         inputBridge.drainEvents();
         delegate.render();
         capture.onFrameRendered();
@@ -63,6 +78,9 @@ public class LivePreviewWrapper implements ApplicationListener {
             server.setGameReady(false);
             server.stop();
             System.out.println("[gdx-claude-preview] Live preview stopped.");
+        }
+        if (previewInput != null) {
+            Gdx.input = previewInput.getDelegate();
         }
         capture.dispose();
         delegate.dispose();
