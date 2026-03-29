@@ -60,10 +60,10 @@ public class HttpServerIntegrationTest {
     }
 
     @Test
-    public void screenshotAfterGameReadyButNoCapture() throws Exception {
+    public void screenshotAfterGameReadyButNoCachedFrame() throws Exception {
         server.setGameReady(true);
         HttpURLConnection conn = get("/screenshot");
-        // Will timeout waiting for GL thread capture and return 503
+        // No frames captured yet, cache is null → 503
         assertEquals(503, conn.getResponseCode());
     }
 

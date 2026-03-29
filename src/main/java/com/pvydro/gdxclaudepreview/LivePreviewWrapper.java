@@ -44,7 +44,7 @@ public class LivePreviewWrapper implements ApplicationListener {
     public void render() {
         inputBridge.drainEvents();
         delegate.render();
-        capture.captureIfRequested();
+        capture.onFrameRendered();
     }
 
     @Override
@@ -64,6 +64,7 @@ public class LivePreviewWrapper implements ApplicationListener {
             server.stop();
             System.out.println("[gdx-claude-preview] Live preview stopped.");
         }
+        capture.dispose();
         delegate.dispose();
     }
 }

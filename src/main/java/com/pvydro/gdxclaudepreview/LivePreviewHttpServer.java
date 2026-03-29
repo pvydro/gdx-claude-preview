@@ -63,7 +63,7 @@ public class LivePreviewHttpServer extends NanoHTTPD {
             return newFixedLengthResponse(Response.Status.lookup(503), "text/plain", "Game not ready");
         }
 
-        byte[] jpeg = capture.requestScreenshot(2000);
+        byte[] jpeg = capture.getLatestScreenshot();
         if (jpeg == null) {
             return newFixedLengthResponse(Response.Status.lookup(503), "text/plain", "No screenshot available");
         }
@@ -174,7 +174,7 @@ public class LivePreviewHttpServer extends NanoHTTPD {
             + "<style>\n"
             + "* { margin: 0; padding: 0; box-sizing: border-box; }\n"
             + "body { background: #1a1a2e; overflow: hidden; display: flex; align-items: center; justify-content: center; height: 100vh; }\n"
-            + "#game { max-width: 100vw; max-height: 100vh; display: block; cursor: crosshair; image-rendering: pixelated; }\n"
+            + "#game { width: 100vw; height: 100vh; display: block; cursor: crosshair; object-fit: contain; }\n"
             + "#status { position: fixed; top: 8px; right: 8px; color: #0f0; font: 12px monospace; background: rgba(0,0,0,0.7); padding: 4px 8px; border-radius: 4px; z-index: 10; }\n"
             + "#status.error { color: #f44; }\n"
             + "</style>\n"
@@ -188,7 +188,7 @@ public class LivePreviewHttpServer extends NanoHTTPD {
             + "  var status = document.getElementById('status');\n"
             + "  var gameW = 0, gameH = 0;\n"
             + "  var connected = false;\n"
-            + "  var pollInterval = 200;\n"
+            + "  var pollInterval = 100;\n"
             + "\n"
             + "  function updateInfo() {\n"
             + "    fetch('/info').then(function(r) { return r.json(); }).then(function(d) {\n"

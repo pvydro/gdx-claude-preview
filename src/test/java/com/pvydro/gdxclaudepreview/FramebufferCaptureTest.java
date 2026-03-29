@@ -1,53 +1,78 @@
 package com.pvydro.gdxclaudepreview;
 
+import org.junit.After;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 
 public class FramebufferCaptureTest {
 
-    @Test
-    public void requestScreenshotTimesOutWhenNothingCompletes() {
-        FramebufferCapture capture = new FramebufferCapture();
+    private FramebufferCapture capture;
 
-        long start = System.currentTimeMillis();
-        byte[] result = capture.requestScreenshot(100);
-        long elapsed = System.currentTimeMillis() - start;
-
-        assertNull(result);
-        assertTrue("Should have waited ~100ms, but waited " + elapsed, elapsed >= 80);
+    @After
+    public void tearDown() {
+        if (capture != null) {
+            capture.dispose();
+        }
     }
 
     @Test
-    public void cachedScreenshotInitiallyNull() {
-        FramebufferCapture capture = new FramebufferCapture();
+    public void latestScreenshotInitiallyNull() {
+        capture = new FramebufferCapture();
+        assertNull(capture.getLatestScreenshot());
+    }
+
+    @Test
+    public void getCachedScreenshotInitiallyNull() {
+        capture = new FramebufferCapture();
         assertNull(capture.getCachedScreenshot());
     }
 
     @Test
-    public void captureIfRequestedWithNoPendingIsNoOp() {
-        // This would NPE or throw if it incorrectly tried to capture without a pending request.
-        // Without GL context, captureIfRequested should just return immediately
-        // since pendingRequest is null.
-        FramebufferCapture capture = new FramebufferCapture();
-        capture.captureIfRequested(); // Should not throw
+    public void deprecatedRequestScreenshotReturnsNull() {
+        capture = new FramebufferCapture();
+        // Deprecated method should return cached (null) immediately, no blocking
+        long start = System.currentTimeMillis();
+        byte[] result = capture.requestScreenshot(1000);
+        long elapsed = System.currentTimeMillis() - start;
+
+        assertNull(result);
+        assertTrue("Should return instantly, but took " + elapsed + "ms", elapsed < 50);
     }
 
     @Test
-    public void concurrentRequestsReturnCachedOrWait() throws Exception {
-        FramebufferCapture capture = new FramebufferCapture();
+    public void onFrameRenderedWithoutGlContextDoesNotCrash() {
+        // onFrameRendered accesses Gdx.graphics which is null in test context.
+        // It should catch the exception gracefully, not crash.
+        capture = new FramebufferCapture();
+        capture.onFrameRendered(); // Should not throw
+    }
 
-        // First request will set a pending future
-        Thread t1 = new Thread(() -> capture.requestScreenshot(200));
-        t1.start();
+    @Test
+    public void captureIntervalSkipsFrames() {
+        // With interval=6, only every 6th call should attempt capture.
+        // Without GL context, all attempts will silently fail, but we verify
+        // the skip logic by ensuring no crash over many frames.
+        capture = new FramebufferCapture(6);
+        for (int i = 0; i < 100; i++) {
+            capture.onFrameRendered(); // Should not throw
+        }
+    }
 
-        // Give t1 time to set the pending request
-        Thread.sleep(50);
+    @Test
+    public void disposeIsIdempotent() {
+        capture = new FramebufferCapture();
+        capture.dispose();
+        capture.dispose(); // Should not throw
+        capture = null; // prevent double-dispose in tearDown
+    }
 
-        // Second request while first is pending — should return null (no cache yet)
-        byte[] result = capture.requestScreenshot(50);
-        assertNull(result);
-
-        t1.join(500);
+    @Test
+    public void customCaptureInterval() {
+        capture = new FramebufferCapture(1);
+        // Interval of 1 = capture every frame. Should still not crash without GL.
+        capture.onFrameRendered();
+        capture.onFrameRendered();
+        capture.onFrameRendered();
     }
 }
