@@ -7,12 +7,14 @@ import com.pvydro.gdxclaudepreview.internal.NanoHTTPD;
 import java.io.ByteArrayInputStream;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class LivePreviewHttpServer extends NanoHTTPD {
 
     private final FramebufferCapture capture;
     private final InputBridge inputBridge;
     private final LogBuffer logBuffer;
+    private final Map<String, LivePreviewEndpoint> customEndpoints = new ConcurrentHashMap<>();
     private volatile boolean gameReady = false;
 
     public LivePreviewHttpServer(int port, FramebufferCapture capture, InputBridge inputBridge, LogBuffer logBuffer) {
@@ -26,6 +28,24 @@ public class LivePreviewHttpServer extends NanoHTTPD {
         this.gameReady = ready;
     }
 
+    /**
+     * Register a custom GET endpoint. The handler will be called on the HTTP
+     * server thread — use volatile or atomic fields for data shared with the GL thread.
+     *
+     * @param path     the URI path (e.g. "/game-state")
+     * @param endpoint handler that returns a JSON response body
+     */
+    public void registerEndpoint(String path, LivePreviewEndpoint endpoint) {
+        customEndpoints.put(path, endpoint);
+    }
+
+    /**
+     * Remove a previously registered custom endpoint.
+     */
+    public void removeEndpoint(String path) {
+        customEndpoints.remove(path);
+    }
+
     @Override
     public Response serve(IHTTPSession session) {
         String uri = session.getUri();
@@ -35,7 +55,12 @@ public class LivePreviewHttpServer extends NanoHTTPD {
         Response response;
 
         try {
-            if (Method.GET.equals(method) && "/".equals(uri)) {
+            // Check custom endpoints first
+            LivePreviewEndpoint custom = customEndpoints.get(uri);
+            if (custom != null && Method.GET.equals(method)) {
+                String body = custom.handle(uri, session.getParms());
+                response = newFixedLengthResponse(Response.Status.OK, "application/json", body);
+            } else if (Method.GET.equals(method) && "/".equals(uri)) {
                 response = serveHtml();
             } else if (Method.GET.equals(method) && "/screenshot".equals(uri)) {
                 response = serveScreenshot();

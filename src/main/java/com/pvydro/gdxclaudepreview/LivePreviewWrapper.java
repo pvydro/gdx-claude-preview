@@ -5,6 +5,10 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 
 import java.io.IOException;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 public class LivePreviewWrapper implements ApplicationListener {
 
@@ -15,6 +19,8 @@ public class LivePreviewWrapper implements ApplicationListener {
     private final LogBuffer logBuffer;
     private LivePreviewHttpServer server;
     private LivePreviewInput previewInput;
+    /** Endpoints registered before the server starts — flushed on create(). */
+    private List<Map.Entry<String, LivePreviewEndpoint>> pendingEndpoints;
 
     public LivePreviewWrapper(ApplicationListener delegate, int port) {
         this.delegate = delegate;
@@ -22,6 +28,28 @@ public class LivePreviewWrapper implements ApplicationListener {
         this.capture = new FramebufferCapture();
         this.inputBridge = new InputBridge();
         this.logBuffer = new LogBuffer(256);
+    }
+
+    /**
+     * Register a custom GET endpoint on the preview server.
+     * Can be called before or after the server has started.
+     */
+    public void registerEndpoint(String path, LivePreviewEndpoint endpoint) {
+        if (server != null) {
+            server.registerEndpoint(path, endpoint);
+        } else {
+            if (pendingEndpoints == null) pendingEndpoints = new ArrayList<>();
+            pendingEndpoints.add(new AbstractMap.SimpleEntry<>(path, endpoint));
+        }
+    }
+
+    /**
+     * Remove a previously registered custom endpoint.
+     */
+    public void removeEndpoint(String path) {
+        if (server != null) {
+            server.removeEndpoint(path);
+        }
     }
 
     @Override
@@ -35,6 +63,13 @@ public class LivePreviewWrapper implements ApplicationListener {
         Gdx.app.setApplicationLogger(new LivePreviewLogger(Gdx.app.getApplicationLogger(), logBuffer));
 
         server = new LivePreviewHttpServer(port, capture, inputBridge, logBuffer);
+        // Flush any endpoints registered before the server was created
+        if (pendingEndpoints != null) {
+            for (Map.Entry<String, LivePreviewEndpoint> entry : pendingEndpoints) {
+                server.registerEndpoint(entry.getKey(), entry.getValue());
+            }
+            pendingEndpoints = null;
+        }
         try {
             server.start();
             server.setGameReady(true);
