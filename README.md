@@ -23,6 +23,7 @@ Claude preview tools --> see the browser page --> interact with the game
 | `/input` | POST | Mouse events (`{type, x, y, button}`) -- supports `mousedown`, `mouseup`, `mousemove` |
 | `/key` | POST | Keyboard events (`{type, code}`) -- supports `keydown`, `keyup` |
 | `/info` | GET | Game dimensions, FPS, ready state |
+| `/logs` | GET | Game log entries since `?since=N` sequence number |
 
 ## Setup
 
@@ -88,6 +89,8 @@ src/main/java/com/pvydro/gdxclaudepreview/
   LivePreviewHttpServer.java    -- HTTP endpoints + embedded HTML page
   FramebufferCapture.java       -- GL capture + background JPEG encoding
   LivePreviewInput.java         -- Gdx.input wrapper for polling-based input
+  LivePreviewLogger.java        -- Gdx.app logger wrapper that tees to LogBuffer
+  LogBuffer.java                -- Fixed-size ring buffer for log messages
   InputBridge.java              -- Thread-safe input event queue + polling state
   KeyMapping.java               -- JS KeyboardEvent.code --> LibGDX Input.Keys
   internal/

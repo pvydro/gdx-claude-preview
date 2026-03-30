@@ -12,12 +12,14 @@ public class LivePreviewHttpServer extends NanoHTTPD {
 
     private final FramebufferCapture capture;
     private final InputBridge inputBridge;
+    private final LogBuffer logBuffer;
     private volatile boolean gameReady = false;
 
-    public LivePreviewHttpServer(int port, FramebufferCapture capture, InputBridge inputBridge) {
+    public LivePreviewHttpServer(int port, FramebufferCapture capture, InputBridge inputBridge, LogBuffer logBuffer) {
         super(port);
         this.capture = capture;
         this.inputBridge = inputBridge;
+        this.logBuffer = logBuffer;
     }
 
     public void setGameReady(boolean ready) {
@@ -43,6 +45,8 @@ public class LivePreviewHttpServer extends NanoHTTPD {
                 response = handleKey(session);
             } else if (Method.GET.equals(method) && "/info".equals(uri)) {
                 response = serveInfo();
+            } else if (Method.GET.equals(method) && "/logs".equals(uri)) {
+                response = serveLogs(session);
             } else if (Method.OPTIONS.equals(method)) {
                 response = newFixedLengthResponse(Response.Status.OK, "text/plain", "");
             } else {
@@ -143,6 +147,18 @@ public class LivePreviewHttpServer extends NanoHTTPD {
         int fps = gameReady ? Gdx.graphics.getFramesPerSecond() : 0;
         String json = "{\"width\":" + w + ",\"height\":" + h + ",\"fps\":" + fps + ",\"ready\":" + gameReady + "}";
         return newFixedLengthResponse(Response.Status.OK, "application/json", json);
+    }
+
+    private Response serveLogs(IHTTPSession session) {
+        String sinceParam = session.getParms().get("since");
+        int since = 0;
+        if (sinceParam != null) {
+            try { since = Integer.parseInt(sinceParam); } catch (NumberFormatException ignored) {}
+        }
+        String json = logBuffer.toJsonSince(since);
+        Response resp = newFixedLengthResponse(Response.Status.OK, "application/json", json);
+        resp.addHeader("Cache-Control", "no-store");
+        return resp;
     }
 
     private Response serveHtml() {
@@ -290,6 +306,19 @@ public class LivePreviewHttpServer extends NanoHTTPD {
             + "      body: JSON.stringify({type:'keyup', key:e.key, code:e.code})\n"
             + "    });\n"
             + "  });\n"
+            + "\n"
+            + "  var logSeq = 0;\n"
+            + "  function pollLogs() {\n"
+            + "    fetch('/logs?since=' + logSeq).then(function(r) { return r.json(); }).then(function(d) {\n"
+            + "      logSeq = d.seq;\n"
+            + "      d.logs.forEach(function(entry) {\n"
+            + "        if (entry.level === 'ERROR') console.error('[GDX] ' + entry.msg);\n"
+            + "        else if (entry.level === 'DEBUG') console.debug('[GDX] ' + entry.msg);\n"
+            + "        else console.log('[GDX] ' + entry.msg);\n"
+            + "      });\n"
+            + "      setTimeout(pollLogs, 500);\n"
+            + "    }).catch(function() { setTimeout(pollLogs, 1000); });\n"
+            + "  }\n"
             + "\n"
             + "  setInterval(updateInfo, 2000);\n"
             + "  updateInfo();\n"

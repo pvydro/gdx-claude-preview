@@ -12,6 +12,7 @@ public class LivePreviewWrapper implements ApplicationListener {
     private final int port;
     private final FramebufferCapture capture;
     private final InputBridge inputBridge;
+    private final LogBuffer logBuffer;
     private LivePreviewHttpServer server;
     private LivePreviewInput previewInput;
 
@@ -20,6 +21,7 @@ public class LivePreviewWrapper implements ApplicationListener {
         this.port = port;
         this.capture = new FramebufferCapture();
         this.inputBridge = new InputBridge();
+        this.logBuffer = new LogBuffer(256);
     }
 
     @Override
@@ -29,7 +31,10 @@ public class LivePreviewWrapper implements ApplicationListener {
         // Create input wrapper so polling-based game code sees preview input
         previewInput = new LivePreviewInput(Gdx.input, inputBridge);
 
-        server = new LivePreviewHttpServer(port, capture, inputBridge);
+        // Install logger to capture Gdx.app.log/error/debug into the log buffer
+        Gdx.app.setApplicationLogger(new LivePreviewLogger(Gdx.app.getApplicationLogger(), logBuffer));
+
+        server = new LivePreviewHttpServer(port, capture, inputBridge, logBuffer);
         try {
             server.start();
             server.setGameReady(true);
